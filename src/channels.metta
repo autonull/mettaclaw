@@ -17,33 +17,33 @@
  (configure IRC_server (py-call (os.environ.get "IRC_SERVER" "irc.libera.chat")))
  (configure IRC_port (py-call (os.environ.get "IRC_PORT" "6667")))
  (configure IRC_user "mettaclaw")
- (py-call (embodiment.start_irc (IRC_channel) (IRC_server) (IRC_port) (IRC_user))))
+ (py-call (channels.embodiment.start_irc (IRC_channel) (IRC_server) (IRC_port) (IRC_user))))
  (if (== (commchannel) cli)
  (progn (configure CLI_prompt "> ")
- (py-call (embodiment.start_cli (CLI_prompt) "MeTTaClaw CLI - type to interact")))
+ (py-call (channels.embodiment.start_cli (CLI_prompt) "MeTTaClaw CLI - type to interact")))
  (if (== (commchannel) mattermost)
- (progn (py-call (mattermost.start_mattermost "https://chat.example.com" "channel" "token")))
+ (progn (py-call (channels.embodiment.start_mattermost "https://chat.example.com" "channel" "token")))
  (println! ("Unknown channel type: " (commchannel)))))))))
 
 ;Receive message from any active channel
 (= (receive)
- (py-call (embodiment.receive_all)))
+ (py-call (channels.embodiment.receive_all)))
 
 ;Send message to all active channels
 (= (send $msg)
  (if (!= $msg (get-state &lastsend))
  (progn (change-state! &lastsend $msg)
  (let $safemsg (string-replace (string-replace $msg "_" " ") "\\n" "\\\\n")
- (py-call (embodiment.send_all $safemsg))))
+ (py-call (channels.embodiment.send_all $safemsg))))
  _))
 
 ;Send to specific channel
 (= (send-to $channel $msg)
- (py-call (embodiment.send_to $channel $msg)))
+ (py-call (channels.embodiment.send_to $channel $msg)))
 
 ;Get list of active channels
 (= (list-channels)
- (py-call (embodiment.get_active_channels)))
+ (py-call (channels.embodiment.get_active_channels)))
 
 ;Search the internet
 (= (search $msg)

@@ -173,7 +173,7 @@ def _filter_loop(read_fd, write_fd):
         while True:
             try:
                 chunk = os.read(read_fd, 4096)
-            except OSError:
+            except OSError as e:
                 break
             if not chunk:
                 break
@@ -195,8 +195,8 @@ def _filter_loop(read_fd, write_fd):
     finally:
         try:
             os.close(write_fd)
-        except OSError:
-            pass
+        except OSError as e:
+            pass # Intentionally ignored
 
 
 def run_filtered(func, *args, **kwargs):
