@@ -9,23 +9,24 @@
 (= (maxErrorFeedback) (empty))
 
 (= (initLoop)
-   (progn (configure maxNewInputLoops 50) ;20
-          (configure maxWakeLoops 1)
-          (configure sleepInterval 1) ;10
-          (configure LLM gpt-5.4)
-          (configure provider Anthropic) ;OpenAI or ASICloud
-          (configure maxOutputToken 6000)
-          (configure reasoningMode medium)
-          (configure wakeupInterval 600) ;600=10 minutes
-          (configure maxErrorFeedback 2000) ;truncate error feedback in history
-          (change-state! &prevmsg "")
-          (change-state! &lastresults "")
-          (change-state! &loops (maxNewInputLoops))))
+ (progn (configure maxNewInputLoops 50) ;20
+ (configure maxWakeLoops 1)
+ (configure sleepInterval 1) ;10
+ (configure LLM (py-call (helper.get_llm_model)))
+ (configure provider (py-call (helper.get_provider)))
+ (configure maxOutputToken 6000)
+ (configure reasoningMode medium)
+ (configure wakeupInterval 600) ;600=10 minutes
+ (configure maxErrorFeedback 2000) ;truncate error feedback in history
+ (change-state! &prevmsg "")
+ (change-state! &lastresults "")
+ (change-state! &loops (maxNewInputLoops))))
 
 (= (getContext)
    (string-safe (py-str ("PROMPT: " (getPrompt) " SKILLS: " (getSkills)
                          " OUTPUT_FORMAT: Output a ((skillName1 args1) (skillName2 args2) (skillName3 args3) (skillName4 args4) (skillName5 args5)) S-expression of up to 5 sexpr commands, double-check the parentheses it must be (cmd1 ... cmdn)!"
                          " each arg is an explicit string hence needs quotes, and variables are forbidden!"
+                         " PINNED: " (get-pinned)
                          " LAST_SKILL_USE_RESULTS: " (last_chars (get-state &lastresults) (maxFeedback)) " HISTORY: " (getHistory) " TIME: " (get_time_as_string)))))
 
 (= (HandleError $msg $cmd $sexpr)
@@ -42,7 +43,7 @@
                         (change-state! &loops (- (get-state &loops) 1)))
           (let $prompt (getContext)
                (progn (println! (---------iteration $k))
-                      (let* (($msgrcv (string-safe (repr (receive))))
+                      (let* (($msgrcv (py-call (helper.clean_irc_message (string-safe (repr (receive))))))
                              ($msgnew (prog1 (and (> (string_length $msgrcv) 0) (!= $msgrcv (get-state &prevmsg)))
                                              (if (> (string_length $msgrcv) 0) (change-state! &prevmsg $msgrcv) _)))
                              ($msg (get-state &prevmsg))
@@ -56,12 +57,10 @@
                                        ($send (py-str ($prompt $lastmessage)))
                                        ($_ (println! (CHARS_SENT: (string_length $send) $send)))
 ($respi (if (== (provider) OpenAI)
-(useGPT (LLM) (maxOutputToken) (reasoningMode) $send)
-(if (== (provider) Anthropic)
-(py-call (lib_llm_ext.useClaude $send))
-(if (== (provider) MiniMax)
-(py-call (lib_llm_ext.useMiniMax $send))
-(py-call (lib_llm_ext.useLLM (LLM) $send (maxOutputToken) (reasoningMode)))))))
+ (useGPT (LLM) (maxOutputToken) (reasoningMode) $send)
+ (if (== (provider) Anthropic)
+ (py-call (lib_llm_ext.useClaude $send))
+ (py-call (lib_llm_ext.useLLM (LLM) $send)))))
                                        ($resp (py-call (helper.balance_parentheses $respi)))
                                        ($response (if (== "(" (first_char $resp)) $resp (progn (println! $resp) (repr (REMEMBER:OUTPUT_NOTHING_ELSE_THAN: ((skill arg) ...))))))
                                        ($sexpr (catch (sread $response)))
@@ -71,8 +70,9 @@
                                        ($results (RESULTS: (collapse (let $s (superpose $sexpr) (COMMAND_RETURN: ($s (HandleError SINGLE_COMMAND_FORMAT_ERROR_NOTHING_WAS_DONE_PLEASE_FIX_AND_RETRY $s (catch (let $R (eval $s) (py-call (helper.normalize_string $R)))))))))))
                                        ($_ (println! $results)))
                                       (progn (if (or $msgnew  (not (== $sexpr ()))) (addToHistory $msg $response $sexpr $msgnew) _)
-                                             (let $clean (py-call (helper.clean_response (string-safe (repr $results))))
-                                                  (change-state! &lastresults $clean))))
+                                             (change-state! &lastresults
+                                                  (py-call (helper.format_lastresults (string-safe (repr $results))
+                                                                                       (py-str (helper.summarize_errors (get-state &error))))))))
                                 (if (> (get_time) (get-state &nextWakeAt))
                                     (change-state! &loops (+ 1 (maxWakeLoops))) _)))
                       (sleep (sleepInterval))

@@ -28,9 +28,9 @@ fi
 # ── Detect LLM provider from env vars ──────────────────────────────────────
 PROVIDER_INIT=""
 if [ -n "${OLLAMA_API_BASE:-}" ]; then
-    PROVIDER_MODEL="${OLLAMA_MODEL:-llama3}"
-    PROVIDER_INIT="(= (provider) Ollama)
-(= (LLM) ollama_chat/$PROVIDER_MODEL)"
+PROVIDER_MODEL="${OLLAMA_MODEL:-llama3}"
+PROVIDER_INIT="(= (provider) Ollama)
+(= (LLM) ollama/${PROVIDER_MODEL})"
 elif [ -n "${OPENAI_API_KEY:-}" ]; then
     PROVIDER_INIT="(= (provider) OpenAI)
 (= (LLM) gpt-4o)"
