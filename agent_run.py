@@ -25,123 +25,48 @@ DRY_RUN = os.environ.get("METTACLAW_DRY_RUN", "").lower() == "true"
 LOG_FILE = os.environ.get("METTACLAW_LOG_FILE", "/opt/PeTTa/agent.log")
 
 # ── Output filter patterns ─────────────────────────────────────────────────
-SKIP_PATTERNS = [
-    "--> ",
-    ":- findall",
-    "Not specialized",
-    "configure_Spec_",
-    "argk_Spec_",
-    "import_prolog_functions",
-    "import_prolog_function(",
-    "compose(",
-    "added function",
-    "added rule",
-    "added sexpr",
-    "added translator",
-    "metta sexpr",
-    "prolog clause",
-    "metta function",
-    "metta runnable",
-    "metta specialization",
-    "Cloning ",
-    "file://",
-    "Loading provider",
-    "Provider auto",
-    "git-import!",
-    "use-module!",
-    "static-import!",
-    "add-translator-rule!",
-    ": compose",
-    ": for",
-    "(@ ",
-    '"Initializing',
-    "empty()",
-    "maxNewInputLoops(50)",
-    "maxWakeLoops(1)",
-    "sleepInterval(1)",
-    "maxOutputToken(6000)",
-    "reasoningMode(medium)",
-    "wakeupInterval(600)",
-    "maxFeedback(5000)",
-    "maxRecallItems(20)",
-    "maxHistory(8000)",
-    "maxErrorFeedback(2000)",
-    "maxEpisodeRecallLines(20)",
-    "commchannel(irc)",
-]
+class LogFilter:
+    """Filters out unwanted MeTTa/Prolog trace output."""
+    def __init__(self):
+        self.skip_patterns = [
+            "--> ", ":- findall", "Not specialized", "configure_Spec_", "argk_Spec_",
+            "import_prolog_functions", "import_prolog_function(", "compose(",
+            "added function", "added rule", "added sexpr", "added translator",
+            "metta sexpr", "prolog clause", "metta function", "metta runnable",
+            "metta specialization", "Cloning ", "file://", "Loading provider",
+            "Provider auto", "git-import!", "use-module!", "static-import!",
+            "add-translator-rule!", ": compose", ": for", "(@ ", '"Initializing',
+            "empty()", "maxNewInputLoops(50)", "maxWakeLoops(1)", "sleepInterval(1)",
+            "maxOutputToken(6000)", "reasoningMode(medium)", "wakeupInterval(600)",
+            "maxFeedback(5000)", "maxRecallItems(20)", "maxHistory(8000)",
+            "maxErrorFeedback(2000)", "maxEpisodeRecallLines(20)", "commchannel(irc)"
+        ]
+        self.skip_prefixes = [
+            "^", "'HandleError", "'get-state", "'change-state", "'println",
+            "'string-safe", "'py-str", "'py-call", "'sread", "'append-file",
+            "'read-file", "'swrite", "'write-file", "'add-atom", "'addToHistory",
+            "'appendToHistory", "'remember", "'query", "'episodes", "'last_chars",
+            "'getPrompt", "'getSkills", "'getHistory", "'get_time", "'receive",
+            "'repr", "'string_length", "'first_char", "'catch", "'eval", "'superpose",
+            "'reduce", "'collapse", "'sleep", "'if ", "'let ", "'progn ", "'case ",
+            "'quote ", "'exists_file", "'consult", "'use_module", "'useGPT",
+            "'useGPTEmbedding", "'getContext", "'initLoop", "'initMemory",
+            "'initChannels", "'mettaclaw", "'configure", "'LLM", "provider(", "'IRC"
+        ]
 
-SKIP_PREFIXES = [
-    "^",
-    "'HandleError",
-    "'get-state",
-    "'change-state",
-    "'println",
-    "'string-safe",
-    "'py-str",
-    "'py-call",
-    "'sread",
-    "'append-file",
-    "'read-file",
-    "'swrite",
-    "'write-file",
-    "'add-atom",
-    "'addToHistory",
-    "'appendToHistory",
-    "'remember",
-    "'query",
-    "'episodes",
-    "'last_chars",
-    "'getPrompt",
-    "'getSkills",
-    "'getHistory",
-    "'get_time",
-    "'receive",
-    "'repr",
-    "'string_length",
-    "'first_char",
-    "'catch",
-    "'eval",
-    "'superpose",
-    "'reduce",
-    "'collapse",
-    "'sleep",
-    "'if ",
-    "'let ",
-    "'progn ",
-    "'case ",
-    "'quote ",
-    "'exists_file",
-    "'consult",
-    "'use_module",
-    "'useGPT",
-    "'useGPTEmbedding",
-    "'getContext",
-    "'initLoop",
-    "'initMemory",
-    "'initChannels",
-    "'mettaclaw",
-    "'configure",
-    "'LLM",
-    "provider(",
-    "'IRC",
-]
-
-
-def _should_skip(line):
-    """Check if a line should be suppressed."""
-    stripped = line.strip()
-    if not stripped:
-        return True
-    for prefix in SKIP_PREFIXES:
-        if stripped.startswith(prefix):
+    def should_skip(self, line):
+        stripped = line.strip()
+        if not stripped:
             return True
-    for pattern in SKIP_PATTERNS:
-        if pattern in stripped:
+        for prefix in self.skip_prefixes:
+            if stripped.startswith(prefix):
+                return True
+        for pattern in self.skip_patterns:
+            if pattern in stripped:
+                return True
+        if re.match(r'^\^+$', stripped):
             return True
-    # Skip lines that are just carets
-    if re.match(r"^\^+$", stripped):
-        return True
-    return False
+        return False
 
 
 # ── Structured logger ──────────────────────────────────────────────────────
@@ -166,14 +91,14 @@ class AgentLogger:
 
 
 # ── Filtered output via fd redirection ─────────────────────────────────────
-def _filter_loop(read_fd, write_fd):
+def _filter_loop(read_fd, write_fd, log_filter):
     """Read from read_fd, filter, write to write_fd. Runs in a thread."""
     buf = ""
     try:
         while True:
             try:
                 chunk = os.read(read_fd, 4096)
-            except OSError as e:
+            except OSError:
                 break
             if not chunk:
                 break
@@ -186,7 +111,7 @@ def _filter_loop(read_fd, write_fd):
                     continue
                 if not line.strip():
                     continue
-                if _should_skip(line):
+                if log_filter.should_skip(line):
                     continue
                 os.write(write_fd, (line + "\n").encode())
         # Flush remaining
@@ -195,8 +120,8 @@ def _filter_loop(read_fd, write_fd):
     finally:
         try:
             os.close(write_fd)
-        except OSError as e:
-            pass # Intentionally ignored
+        except OSError:
+            pass
 
 
 def run_filtered(func, *args, **kwargs):
@@ -216,8 +141,9 @@ def run_filtered(func, *args, **kwargs):
     os.dup2(w_fd, 2)
 
     # Start filter thread — reads from pipe, writes to orig_stdout
+    log_filter = LogFilter()
     filter_thread = threading.Thread(
-        target=_filter_loop, args=(r_fd, orig_stdout), daemon=True
+        target=_filter_loop, args=(r_fd, orig_stdout, log_filter), daemon=True
     )
     filter_thread.start()
 
