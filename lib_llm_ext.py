@@ -32,5 +32,5 @@ def useClaude(content):
 def useGPT(model, max_tokens, reasoning_mode, content):
     return _chat(model=model, content=content, max_tokens=max_tokens)
 
-def useLLM(model, content, max_tokens=6000):
+def useLLM(model, content, max_tokens=6000, reasoning_mode=None):
     return _chat(model=model, content=content, max_tokens=max_tokens)

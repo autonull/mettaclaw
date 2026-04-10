@@ -1,76 +1,42 @@
 # MeTTaClaw Dockerfile
 # ========================================================================
-# Podman-compatible Docker image for MeTTaClaw
-# ========================================================================
 
-# Base image
 FROM archlinux:latest
 
-# PeTTa repo and branch
-ARG PETTA_REPO=https://github.com/trueagi-io/PeTTa
-ARG PETTA_BRANCH=main
-
-# MeTTaClaw repo and branch
-ARG METTACLAW_REPO=https://github.com/autonull/mettaclaw
-ARG METTACLAW_BRANCH=main
-
-# Container paths
-ARG CONTAINER_PETTA_PATH=/opt/PeTTa
-ARG CONTAINER_METTACLAW_PATH=/opt/PeTTa/repos/mettaclaw
-
-# ========================================================================
-# Environment
-# ========================================================================
 ENV TERM=xterm-256color
+ENV PETTA_PATH=/opt/PeTTa
+ENV PATH="/opt/PeTTa:${PATH}"
 
 # ========================================================================
-# Install Dependencies (Arch Linux uses pacman)
+# Install system dependencies
 # ========================================================================
-RUN pacman-key --init && pacman -Sy --noconfirm \
-    base-devel \
-    git \
-    curl \
-    ca-certificates \
-    python \
-    python-pip \
-    libffi \
-    openssl \
-    cargo \
-    rust \
-    cmake \
-    wget \
-    gmp \
-    libedit \
-    readline \
-    libarchive \
-    pcre \
-    libyaml \
-    swi-prolog \
+RUN pacman-key --init && \
+    pacman -Sy --noconfirm \
+        base-devel git curl ca-certificates python python-pip \
+        libffi openssl cargo rust cmake wget \
+        gmp libedit readline libarchive pcre libyaml swi-prolog \
     || true
 
-# Install janus for Python interop (optional - can work without)
-RUN pip3 install --break-system-packages janus || true
+RUN pip3 install --break-system-packages janus-swi janus litellm || true
 
 # ========================================================================
-# Clone PeTTa
+# Clone PeTTa (the execution engine)
 # ========================================================================
-RUN git clone --depth 1 --branch ${PETTA_BRANCH} ${PETTA_REPO} ${CONTAINER_PETTA_PATH}
-
-# ========================================================================
-# Clone MeTTaClaw
-# ========================================================================
-RUN git clone --depth 1 --branch ${METTACLAW_BRANCH} ${METTACLAW_REPO} ${CONTAINER_METTACLAW_PATH}
+RUN git clone --depth 1 --branch main \
+    https://github.com/trueagi-io/PeTTa /opt/PeTTa
 
 # ========================================================================
-# Setup
+# Clone MeTTaClaw (the agent code)
 # ========================================================================
-WORKDIR ${CONTAINER_PETTA_PATH}
+RUN git clone --depth 1 --branch main \
+    https://github.com/autonull/mettaclaw /opt/PeTTa/repos/mettaclaw
 
-RUN cp ${CONTAINER_METTACLAW_PATH}/run.metta ./
+# ========================================================================
+# Setup container runner
+# ========================================================================
+WORKDIR /opt/PeTTa
+COPY container_run.sh /opt/PeTTa/container_run.sh
+RUN chmod +x /opt/PeTTa/container_run.sh
 
-ENV PETTA_PATH=${CONTAINER_PETTA_PATH}
-ENV PATH="${CONTAINER_PETTA_PATH}:${PATH}"
-
-RUN chmod +x run.sh
-
-CMD ["/bin/bash", "-c", "echo 'MeTTaClaw ready!'; echo 'To run: ./run.sh run.metta'"]
+ENTRYPOINT []
+CMD ["/opt/PeTTa/container_run.sh"]

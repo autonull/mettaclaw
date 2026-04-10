@@ -1,0 +1,30 @@
+# Don't leak secrets into the image
+.env
+.env.*
+!.env.example
+
+# Local build artifacts
+__pycache__
+*.pyc
+*.pyo
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Memory (may contain sensitive data)
+memory/
+
+# Host-only scripts (not needed inside container)
+run.sh
+run.py
