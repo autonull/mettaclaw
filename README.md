@@ -116,12 +116,15 @@ See `.env.example` for all available options.
 
 | Command | Description |
 |---------|-------------|
-| `./run.sh` | Run `run.metta` |
+| `./run.sh` | Run `run.metta` (filtered output) |
 | `./run.sh build` | Build the container image |
-| `./run.sh run [script.metta]` | Run a specific script |
+| `./run.sh run [script]` | Run a specific script |
+| `./run.sh verbose [script]` | Run with full MeTTa/Prolog trace |
+| `./run.sh dry-run [script]` | Validate setup without LLM calls |
 | `./run.sh shell` | Open a shell in the container |
+| `./run.sh reset-history` | Clear memory/history.metta |
 | `./run.sh clean` | Remove the image |
-| `./run.sh status` | Check build status |
+| `./run.sh status` | Check build status and config |
 | `./run.sh -h` | Show help |
 
 ---
@@ -149,8 +152,17 @@ OLLAMA_MODEL="hf.co/bartowski/Qwen_Qwen3-8B-GGUF:Q6_K" \
 # Run with Claude
 ANTHROPIC_API_KEY="sk-ant-..." ./run.sh
 
+# Validate setup before running (no LLM calls)
+OLLAMA_API_BASE="http://localhost:11434" ./run.sh dry-run
+
+# Full trace output for debugging
+./run.sh verbose
+
 # Debug shell inside container
 ./run.sh shell
+
+# Clear agent history
+./run.sh reset-history
 
 # Check status
 ./run.sh status
@@ -168,16 +180,42 @@ Host (run.sh)                    Container (/opt/PeTTa)
                                     ↓
                                provider_init.metta  (auto-detected from env)
                                     ↓
+                               agent_run.py  (filters output, writes agent.log)
+                                    ↓
                                run.metta → PeTTa → LLM
 ```
 
 - **`run.sh`** (host) — builds and runs the container
-- **`container_run.sh`** (inside) — detects provider from env vars, loads MeTTa, runs PeTTa
+- **`container_run.sh`** (inside) — detects provider from env vars
+- **`agent_run.py`** (inside) — runs PeTTa with output filtering and structured logging
 - **`lib_llm_ext.py`** — Python LLM interface using LiteLLM (supports all providers)
+
+### Output Filtering
+
+By default, MeTTa compilation noise (Prolog clauses, specialization traces) is suppressed. You see only:
+- Iteration numbers
+- Human messages received
+- LLM prompts sent and responses
+- Command results and errors
+
+Use `./run.sh verbose` for the full trace.
+
+### Structured Logging
+
+Every run writes `/opt/PeTTa/agent.log` with JSON lines:
+```json
+{"t": 0.01, "event": "iteration", "k": 1, "loops": 50, "human_msg": ""}
+{"t": 30.5, "event": "response", "text": "((query \"goals\"))"}
+```
+
+Copy it out after a run:
+```bash
+podman cp <container>:/opt/PeTTa/agent.log .
+```
 
 ### Local Development
 
-Local MeTTa files (`run.metta`, `lib_mettaclaw.metta`, `lib_nal.metta`, `lib_llm_ext.py`, `src/`) are mounted read-only into the container. The `memory/` directory remains writable inside. Edit files on your host and they're available on next run — no rebuild needed.
+Local MeTTa files (`run.metta`, `lib_mettaclaw.metta`, `src/`) are mounted read-only into the container. The `memory/` directory is mounted read-write for history persistence. Edit files on your host and they're available on next run — no rebuild needed.
 
 ---
 
@@ -185,13 +223,18 @@ Local MeTTa files (`run.metta`, `lib_mettaclaw.metta`, `lib_nal.metta`, `lib_llm
 
 | File | Purpose |
 |------|---------|
-| `run.sh` | Host-side runner (build, run, shell, clean) |
-| `run.py` | Python runner (local PeTTa invocation) |
-| `container_run.sh` | Inside-container runner (provider detection, PeTTa) |
+| `run.sh` | Host-side runner (build, run, verbose, dry-run, shell, clean, status) |
+| `run.py` | Python runner (local PeTTa invocation, outside container) |
+| `container_run.sh` | Inside-container entrypoint (provider detection) |
+| `agent_run.py` | Inside-container PeTTa wrapper (filtering, logging, dry-run) |
 | `Dockerfile` | Container image definition |
 | `lib_llm_ext.py` | Python LLM wrapper (LiteLLM, all providers) |
+| `Makefile` | Shortcuts: `make build`, `make run`, `make dry-run` |
+| `VERSION` | Current version (shown in status output) |
 | `.env.example` | Configuration template |
 | `.env` | Your config (gitignored) |
+| `memory/prompt.txt` | Agent system prompt (edit locally, mounted into container) |
+| `memory/history.metta` | Conversation history (persistent across runs) |
 
 ---
 

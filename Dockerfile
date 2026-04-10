@@ -36,6 +36,7 @@ RUN git clone --depth 1 --branch main \
 # ========================================================================
 WORKDIR /opt/PeTTa
 COPY container_run.sh /opt/PeTTa/container_run.sh
+COPY agent_run.py /opt/PeTTa/agent_run.py
 RUN chmod +x /opt/PeTTa/container_run.sh
 
 ENTRYPOINT []

@@ -25,7 +25,7 @@ if [ ! -f "$SCRIPT" ]; then
     exit 1
 fi
 
-# Detect LLM provider from env vars and generate provider override
+# ── Detect LLM provider from env vars ──────────────────────────────────────
 PROVIDER_INIT=""
 if [ -n "${OLLAMA_API_BASE:-}" ]; then
     PROVIDER_MODEL="${OLLAMA_MODEL:-llama3}"
@@ -53,21 +53,6 @@ if [ -n "$PROVIDER_INIT" ]; then
     printf '%s\n' "$PROVIDER_INIT" | head -1
 fi
 
+# ── Run via agent_run.py (filtering, logging, dry-run support) ─────────────
 echo "Running: $SCRIPT"
-exec python3 -c "
-import sys, os
-
-sys.path.insert(0, '/opt/PeTTa/python')
-from petta import PeTTa
-p = PeTTa(verbose=True)
-
-# Load provider override if it exists
-provider_init = os.path.join('/opt/PeTTa', 'provider_init.metta')
-if os.path.exists(provider_init):
-    print(f'Loading provider config: {provider_init}')
-    p.load_metta_file(provider_init)
-
-# Load the main script
-result = p.load_metta_file(sys.argv[1])
-print(f'Result: {result}')
-" "$SCRIPT"
+exec python3 /opt/PeTTa/agent_run.py "$SCRIPT"
