@@ -1,36 +1,36 @@
-import os, openai
+import os
+import litellm
+from litellm import completion
 
-ASI_CLIENT = openai.OpenAI(
-    api_key=os.environ["ASI_API_KEY"],
-    base_url="https://inference.asicloud.cudos.org/v1"
-)
-
-ANTHROPIC_CLIENT = openai.OpenAI(
-    api_key=os.environ["ANTHROPIC_API_KEY"],
-    base_url="https://api.anthropic.com/v1/"
-)
+litellm.drop_params = True
+litellm.set_verbose = False
 
 def _clean(text):
-    return text.replace("_quote_", '"').replace("_apostrophe_", "'")
+    if text:
+        return text.replace("_quote_", '"').replace("_apostrophe_", "'")
+    return ""
 
-def _chat(client, model, content, max_tokens=6000):
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": content}],
-        max_tokens=max_tokens
-    )
-    return _clean(resp.choices[0].message.content)
+def _chat(model, content, max_tokens=6000):
+    try:
+        resp = completion(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=max_tokens
+        )
+        return _clean(resp.choices[0].message.content)
+    except Exception as e:
+        return f"LLM Error: {str(e)}"
 
 def useMiniMax(content):
-    return _chat(
-        client=ASI_CLIENT,
-        model="minimax/minimax-m2.5",
-        content=content
-    )
+    model = os.environ.get('MINIMAX_MODEL', 'openai/minimax/minimax-m2.5')
+    return _chat(model=model, content=content, max_tokens=6000)
 
 def useClaude(content):
-    return _chat(
-        client=ANTHROPIC_CLIENT,
-        model="claude-opus-4-6",
-        content=content
-    )
+    model = os.environ.get('CLAUDE_MODEL', 'anthropic/claude-opus-4-20250514')
+    return _chat(model=model, content=content, max_tokens=8192)
+
+def useGPT(model, max_tokens, reasoning_mode, content):
+    return _chat(model=model, content=content, max_tokens=max_tokens)
+
+def useLLM(model, content, max_tokens=6000):
+    return _chat(model=model, content=content, max_tokens=max_tokens)
