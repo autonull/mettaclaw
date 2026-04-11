@@ -179,18 +179,6 @@ def main():
 
     p = PeTTa(verbose=VERBOSE)
 
-    # Load provider config if exists
-    provider_init = "/opt/PeTTa/provider_init.metta"
-    if os.path.exists(provider_init):
-        print(f"Provider config: {provider_init}")
-        with open(provider_init) as f:
-            content = f.read().strip()
-            for line in content.split("\n"):
-                m = re.search(r"\(=\s*\((LLM)\)\s*(\S+)\)", line)
-                if m:
-                    print(f"  {m.group(1)} = {m.group(2)}")
-        p.load_metta_file(provider_init)
-
     if DRY_RUN:
         def _dry_run():
             print("\nLoading MeTTa library files...")
@@ -219,14 +207,24 @@ def main():
             print("\nChecking prompt assembly...")
             print("  (Skipped - requires running (mettaclaw) to set up context)")
 
-            print(f"Provider: Ollama (auto-detected)")
-            print(f"LLM model: ollama_chat/hf.co/bartowski/Qwen_Qwen3-8B-GGUF:Q6_K")
+            try:
+                import sys
+                if '/opt/PeTTa/repos/mettaclaw/src' not in sys.path:
+                    sys.path.insert(0, '/opt/PeTTa/repos/mettaclaw/src')
+                import helper
+                model = helper.get_llm_model()
+                print(f"LLM model (auto-detected): {model}")
+            except Exception as e:
+                print(f"Could not auto-detect LLM model in dry-run: {e}")
 
             print("\nDry run complete - setup is valid")
             return True
 
         ok = run_filtered(_dry_run)
         sys.exit(0 if ok else 1)
+
+    # Note: `loop.metta` configures `(LLM)` dynamically inside the MeTTa script:
+    # `(= (LLM) (py-call (helper.get_llm_model)))`
 
     # Full run
     try:

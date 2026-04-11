@@ -7,24 +7,30 @@ HISTORY_PATH = os.environ.get("METTACLAW_HISTORY", "memory/history.metta")
 
 def get_llm_model():
     """Auto-detect LLM model based on environment variables."""
+    if os.environ.get("OLLAMA_API_BASE"):
+        model = os.environ.get("OLLAMA_MODEL", "llama3")
+        return f"ollama/{model}" if not model.startswith("ollama/") else model
+    if os.environ.get("OPENAI_API_KEY"):
+        return os.environ.get("OPENAI_MODEL", "gpt-4o")
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return os.environ.get("OPENROUTER_MODEL", "openrouter/auto")
+    if os.environ.get("GROQ_API_KEY"):
+        model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        return f"groq/{model}" if not model.startswith("groq/") else model
+
+    # Fallback
     if os.environ.get("OLLAMA_MODEL"):
         return os.environ.get("OLLAMA_MODEL")
-    if os.environ.get("OLLAMA_API_BASE"):
-        return os.environ.get("OLLAMA_MODEL", "llama3")
     if os.environ.get("OPENAI_MODEL"):
         return os.environ.get("OPENAI_MODEL")
-    if os.environ.get("ANTHROPIC_MODEL"):
-        return os.environ.get("ANTHROPIC_MODEL")
+
     return "llama3"
 
 def get_history_path():
     """Get history file path, checking multiple possible locations."""
-    possible_paths = [
-        HISTORY_PATH,
-        "repos/mettaclaw/memory/history.metta",
-        "memory/history.metta",
-    ]
-    for path in possible_paths:
+    for path in [HISTORY_PATH, "repos/mettaclaw/memory/history.metta", "memory/history.metta"]:
         if os.path.exists(path):
             return path
     return HISTORY_PATH
