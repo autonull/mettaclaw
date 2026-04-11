@@ -9,7 +9,7 @@ def mock_chroma(monkeypatch):
     monkeypatch.setattr(lib_llm_ext._memory_manager, "chroma_available", False)
 
 def test_generate_response_mocked(monkeypatch):
-    def mock_completion(model, messages, max_tokens):
+    def mock_completion(model, messages, max_tokens, timeout=None):
         class MockChoice:
             class MockMessage:
                 content = f"Mocked response from {model}"

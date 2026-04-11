@@ -8,25 +8,31 @@
 (= (CLI_prompt) (empty))
 
 ;Initialize channels based on configuration
+(= (start_channel irc)
+   (progn
+     (configure IRC_channel (py-call (os.environ.get "IRC_CHANNEL" "##metta")))
+     (configure IRC_server (py-call (os.environ.get "IRC_SERVER" "irc.libera.chat")))
+     (configure IRC_port (py-call (os.environ.get "IRC_PORT" "6667")))
+     (configure IRC_user "mettaclaw")
+     (py-call (channels.embodiment.start_irc (IRC_channel) (IRC_server) (IRC_port) (IRC_user)))))
+
+(= (start_channel cli)
+   (progn
+     (configure CLI_prompt "> ")
+     (py-call (channels.embodiment.start_cli (CLI_prompt) "MeTTaClaw CLI - type to interact"))))
+
+(= (start_channel mattermost)
+   (py-call (channels.embodiment.start_mattermost "https://chat.example.com" "channel" "token")))
+
+(= (start_channel $unknown)
+   (println! ("Unknown channel type: " $unknown)))
+
 (= (initChannels)
  (progn (println! "Initializing channels")
    (let $chan (py-call (os.environ.get "METTACLAW_CHANNEL" "irc"))
-     (configure commchannel $chan)
-     (if (== (commchannel) irc)
-         (progn
-           (configure IRC_channel (py-call (os.environ.get "IRC_CHANNEL" "##metta")))
-           (configure IRC_server (py-call (os.environ.get "IRC_SERVER" "irc.libera.chat")))
-           (configure IRC_port (py-call (os.environ.get "IRC_PORT" "6667")))
-           (configure IRC_user "mettaclaw")
-           (py-call (channels.embodiment.start_irc (IRC_channel) (IRC_server) (IRC_port) (IRC_user))))
-         (if (== (commchannel) cli)
-             (progn
-               (configure CLI_prompt "> ")
-               (py-call (channels.embodiment.start_cli (CLI_prompt) "MeTTaClaw CLI - type to interact")))
-             (if (== (commchannel) mattermost)
-                 (progn
-                   (py-call (channels.embodiment.start_mattermost "https://chat.example.com" "channel" "token")))
-                 (println! ("Unknown channel type: " (commchannel)))))))))
+     (progn
+       (configure commchannel $chan)
+       (start_channel (commchannel))))))
 
 ;Receive message from any active channel
 (= (receive)

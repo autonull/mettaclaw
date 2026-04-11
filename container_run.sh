@@ -25,29 +25,6 @@ if [ ! -f "$SCRIPT" ]; then
     exit 1
 fi
 
-# ── Detect LLM provider from env vars ──────────────────────────────────────
-PROVIDER_INIT=""
-if [ -n "${OLLAMA_API_BASE:-}" ]; then
-    PROVIDER_MODEL="${OLLAMA_MODEL:-llama3}"
-    PROVIDER_INIT="(= (LLM) ollama/${PROVIDER_MODEL})"
-elif [ -n "${OPENAI_API_KEY:-}" ]; then
-    PROVIDER_INIT="(= (LLM) gpt-4o)"
-elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-    PROVIDER_INIT="(= (LLM) claude-sonnet-4-20250514)"
-elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
-    PROVIDER_INIT="(= (LLM) openrouter/auto)"
-elif [ -n "${GROQ_API_KEY:-}" ]; then
-    PROVIDER_MODEL="${OLLAMA_MODEL:-llama-3.3-70b-versatile}"
-    PROVIDER_INIT="(= (LLM) groq/$PROVIDER_MODEL)"
-fi
-
-# Write provider config if detected
-if [ -n "$PROVIDER_INIT" ]; then
-    printf '%s\n' "$PROVIDER_INIT" > /opt/PeTTa/provider_init.metta
-    echo "Provider auto-detected:"
-    printf '%s\n' "$PROVIDER_INIT" | head -1
-fi
-
 # ── Run via agent_run.py (filtering, logging, dry-run support) ─────────────
 echo "Running: $SCRIPT"
 exec python3 /opt/PeTTa/agent_run.py "$SCRIPT"

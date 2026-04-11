@@ -36,52 +36,62 @@ class MattermostChannel(Channel):
         self.thread.start()
 
     def _ws_loop(self):
-        try:
-            self.bot_user_id = self._get_bot_user_id()
-        except Exception as e:
-            print(f"Failed to get Mattermost bot user ID: {e}")
-            self.running = False
-            return
-
-        ws_url = self.url.replace("https", "wss").replace("http", "ws") + "/api/v4/websocket"
-        ws = websocket.WebSocket()
-        try:
-            ws.connect(ws_url, header=[f"Authorization: Bearer {self.token}"])
-        except Exception as e:
-            print(f"Mattermost WS connection failed: {e}")
-            self.running = False
-            return
-
-        self.ws = ws
-        self.connected = True
-        last_ping = time.time()
-
         while self.running:
             try:
-                if time.time() - last_ping > 25:
-                    ws.ping()
-                    last_ping = time.time()
-
-                ws.settimeout(1)
-                event = json.loads(ws.recv())
-
-                if event.get("event") == "posted":
-                    post = json.loads(event["data"]["post"])
-                    if post["channel_id"] == self.channel_id and post["user_id"] != self.bot_user_id:
-                        try:
-                            name = self._get_display_name(post["user_id"])
-                        except Exception:
-                            name = "unknown"
-                        self.set_last_message(f"{name}: {post['message']}")
-
-            except websocket.WebSocketTimeoutException:
-                continue
+                self.bot_user_id = self._get_bot_user_id()
             except Exception as e:
-                print(f"Mattermost WS error: {e}")
-                break
+                print(f"Failed to get Mattermost bot user ID: {e}. Retrying in 5s...")
+                if self.running:
+                    time.sleep(5)
+                continue
 
-        ws.close()
-        self.connected = False
+            ws_url = self.url.replace("https", "wss").replace("http", "ws") + "/api/v4/websocket"
+            ws = websocket.WebSocket()
+            try:
+                ws.connect(ws_url, header=[f"Authorization: Bearer {self.token}"])
+            except Exception as e:
+                print(f"Mattermost WS connection failed: {e}. Retrying in 5s...")
+                if self.running:
+                    time.sleep(5)
+                continue
+
+            self.ws = ws
+            self.connected = True
+            last_ping = time.time()
+
+            while self.running:
+                try:
+                    if time.time() - last_ping > 25:
+                        ws.ping()
+                        last_ping = time.time()
+
+                    ws.settimeout(1)
+                    event = json.loads(ws.recv())
+
+                    if event.get("event") == "posted":
+                        post = json.loads(event["data"]["post"])
+                        if post["channel_id"] == self.channel_id and post["user_id"] != self.bot_user_id:
+                            try:
+                                name = self._get_display_name(post["user_id"])
+                            except Exception:
+                                name = "unknown"
+                            self.set_last_message(f"{name}: {post['message']}")
+
+                except websocket.WebSocketTimeoutException:
+                    continue
+                except Exception as e:
+                    print(f"Mattermost WS error: {e}. Reconnecting...")
+                    break
+
+            try:
+                ws.close()
+            except Exception:
+                pass
+            self.connected = False
+            self.ws = None
+
+            if self.running:
+                time.sleep(5)
 
     def stop(self):
         super().stop()
@@ -109,6 +119,6 @@ def start_mattermost(url, channel_id, token):
     chan = MattermostChannel("mattermost", url, channel_id, token)
     chan.start()
     embodiment.register_channel("mattermost", chan)
-    embodiment._active_channel = "mattermost"
-    embodiment._running = True
+    embodiment._set_active_channel("mattermost")
+    embodiment._set_running(True)
     return True

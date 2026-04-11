@@ -14,6 +14,7 @@ import sys
 import json
 import time
 import threading
+import fcntl
 from pathlib import Path
 
 sys.path.insert(0, '/opt/PeTTa/python')
@@ -28,7 +29,7 @@ LOG_FILE = os.environ.get("METTACLAW_LOG_FILE", "/opt/PeTTa/agent.log")
 class LogFilter:
     """Filters out unwanted MeTTa/Prolog trace output."""
     def __init__(self):
-        self.skip_patterns = [
+        self.skip_patterns = (
             "--> ", ":- findall", "Not specialized", "configure_Spec_", "argk_Spec_",
             "import_prolog_functions", "import_prolog_function(", "compose(",
             "added function", "added rule", "added sexpr", "added translator",
@@ -40,8 +41,8 @@ class LogFilter:
             "maxOutputToken(6000)", "reasoningMode(medium)", "wakeupInterval(600)",
             "maxFeedback(5000)", "maxRecallItems(20)", "maxHistory(8000)",
             "maxErrorFeedback(2000)", "maxEpisodeRecallLines(20)", "commchannel(irc)"
-        ]
-        self.skip_prefixes = [
+        )
+        self.skip_prefixes = (
             "^", "'HandleError", "'get-state", "'change-state", "'println",
             "'string-safe", "'py-str", "'py-call", "'sread", "'append-file",
             "'read-file", "'swrite", "'write-file", "'add-atom", "'addToHistory",
@@ -52,19 +53,18 @@ class LogFilter:
             "'quote ", "'exists_file", "'consult", "'use_module", "'useGPT",
             "'useGPTEmbedding", "'getContext", "'initLoop", "'initMemory",
             "'initChannels", "'mettaclaw", "'configure", "'LLM", "provider(", "'IRC"
-        ]
+        )
+        self.caret_re = re.compile(r'^\^+$')
 
     def should_skip(self, line):
         stripped = line.strip()
         if not stripped:
             return True
-        for prefix in self.skip_prefixes:
-            if stripped.startswith(prefix):
-                return True
-        for pattern in self.skip_patterns:
-            if pattern in stripped:
-                return True
-        if re.match(r'^\^+$', stripped):
+        if stripped.startswith(self.skip_prefixes):
+            return True
+        if any(pattern in stripped for pattern in self.skip_patterns):
+            return True
+        if self.caret_re.match(stripped):
             return True
         return False
 
@@ -75,13 +75,15 @@ class AgentLogger:
     def __init__(self, path):
         self.path = path
         self.start = time.time()
+        self.lock = threading.Lock()
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         Path(self.path).write_text("")
 
     def _write(self, event, **kwargs):
         entry = {"t": round(time.time() - self.start, 2), "event": event, **kwargs}
-        with open(self.path, "a") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+        with self.lock:
+            with open(self.path, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
 
     def iteration(self, k, loops, human_msg):
         self._write("iteration", k=k, loops=loops, human_msg=human_msg)
@@ -171,6 +173,21 @@ def main():
         print(f"Error: Script not found: {script}", file=sys.stderr)
         sys.exit(1)
 
+    # Enforce single instance via history file lock
+    try:
+        sys.path.insert(0, '/opt/PeTTa/repos/mettaclaw/src')
+        import helper
+        history_path = helper.get_history_path()
+        Path(history_path).parent.mkdir(parents=True, exist_ok=True)
+        # Open in append mode so we don't truncate existing history
+        lock_fd = open(history_path, "a")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"Error: Another instance of MeTTaClaw is already running (lock held on {history_path})", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Warning: Could not establish instance lock: {e}", file=sys.stderr)
+
     logger = AgentLogger(LOG_FILE)
 
     print(f"Running: {script}")
@@ -178,18 +195,6 @@ def main():
         print(f"Mode: DRY RUN (no LLM calls)")
 
     p = PeTTa(verbose=VERBOSE)
-
-    # Load provider config if exists
-    provider_init = "/opt/PeTTa/provider_init.metta"
-    if os.path.exists(provider_init):
-        print(f"Provider config: {provider_init}")
-        with open(provider_init) as f:
-            content = f.read().strip()
-            for line in content.split("\n"):
-                m = re.search(r"\(=\s*\((LLM)\)\s*(\S+)\)", line)
-                if m:
-                    print(f"  {m.group(1)} = {m.group(2)}")
-        p.load_metta_file(provider_init)
 
     if DRY_RUN:
         def _dry_run():
@@ -219,14 +224,24 @@ def main():
             print("\nChecking prompt assembly...")
             print("  (Skipped - requires running (mettaclaw) to set up context)")
 
-            print(f"Provider: Ollama (auto-detected)")
-            print(f"LLM model: ollama_chat/hf.co/bartowski/Qwen_Qwen3-8B-GGUF:Q6_K")
+            try:
+                import sys
+                if '/opt/PeTTa/repos/mettaclaw/src' not in sys.path:
+                    sys.path.insert(0, '/opt/PeTTa/repos/mettaclaw/src')
+                import helper
+                model = helper.get_llm_model()
+                print(f"LLM model (auto-detected): {model}")
+            except Exception as e:
+                print(f"Could not auto-detect LLM model in dry-run: {e}")
 
             print("\nDry run complete - setup is valid")
             return True
 
         ok = run_filtered(_dry_run)
         sys.exit(0 if ok else 1)
+
+    # Note: `loop.metta` configures `(LLM)` dynamically inside the MeTTa script:
+    # `(= (LLM) (py-call (helper.get_llm_model)))`
 
     # Full run
     try:

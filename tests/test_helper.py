@@ -57,6 +57,17 @@ def test_clean_response():
     assert helper.clean_response("hello _quote_world_quote_ and _apostrophe_friend_apostrophe_") == 'hello "world" and \'friend\''
     assert helper.clean_response(None) == ""
 
+def test_truncation():
+    # Over 10k chars should truncate
+    long_string = "a" * 15000
+    res = helper.normalize_string(long_string)
+    assert len(res) < 11000
+    assert "... (output truncated" in res
+
+    res_last = helper.format_lastresults(long_string, "")
+    assert len(res_last) < 11000
+    assert "... (truncated" in res_last
+
 def test_summarize_errors():
     assert helper.summarize_errors(None) == ""
     assert helper.summarize_errors([]) == ""
@@ -85,3 +96,36 @@ def test_clean_irc_message():
     assert helper.clean_irc_message("jules:hello there") == "jules:hello there" # Missing space after colon
     assert helper.clean_irc_message("hello there") == "hello there"
     assert helper.clean_irc_message(None) is None
+
+def test_get_llm_model(monkeypatch):
+    # Test fallback
+    monkeypatch.delenv("OLLAMA_API_BASE", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert helper.get_llm_model() == "llama3"
+
+    # Test OpenAI
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    assert helper.get_llm_model() == "gpt-4o"
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    assert helper.get_llm_model() == "gpt-3.5-turbo"
+    monkeypatch.delenv("OPENAI_API_KEY")
+    monkeypatch.delenv("OPENAI_MODEL")
+
+    # Test Ollama
+    monkeypatch.setenv("OLLAMA_API_BASE", "http://localhost:11434")
+    assert helper.get_llm_model() == "ollama/llama3"
+    monkeypatch.setenv("OLLAMA_MODEL", "llama3.1")
+    assert helper.get_llm_model() == "ollama/llama3.1"
+    monkeypatch.setenv("OLLAMA_MODEL", "ollama/llama3.2")
+    assert helper.get_llm_model() == "ollama/llama3.2"
+    monkeypatch.delenv("OLLAMA_API_BASE")
+    monkeypatch.delenv("OLLAMA_MODEL")
+
+    # Test Anthropic
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    assert helper.get_llm_model() == "claude-3-5-sonnet-20241022"
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+
+    # Test Groq
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    assert helper.get_llm_model() == "groq/llama-3.3-70b-versatile"

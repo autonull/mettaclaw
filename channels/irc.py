@@ -25,53 +25,59 @@ class IRCChannel(Channel):
                 self.sock.sendall((cmd + "\r\n").encode())
 
     def _irc_loop(self):
-        sock = socket.socket()
-        try:
-            sock.connect((self.server, self.port))
-            self.sock = sock
-            self._send(f"NICK {self.nick}")
-            self._send(f"USER {self.nick} 0 * :{self.nick}")
+        import time
+        while self.running:
+            sock = socket.socket()
+            try:
+                sock.connect((self.server, self.port))
+                with self.sock_lock:
+                    self.sock = sock
+                self._send(f"NICK {self.nick}")
+                self._send(f"USER {self.nick} 0 * :{self.nick}")
 
-            while self.running:
-                try:
-                    data = sock.recv(4096).decode(errors="ignore")
-                except OSError:
-                    break
-                if not data:
-                    break
+                while self.running:
+                    try:
+                        data = sock.recv(4096).decode(errors="ignore")
+                    except OSError:
+                        break
+                    if not data:
+                        break
 
-                for line in data.split("\r\n"):
-                    if not line:
-                        continue
-                    if line.startswith("PING"):
-                        self._send(f"PONG {line.split()[1]}")
-                    parts = line.split()
-                    if len(parts) > 1 and parts[1] == "001":
-                        self.connected = True
-                        self._send(f"JOIN {self.irc_channel}")
-                    elif line.startswith(":") and " PRIVMSG " in line:
+                    for line in data.split("\r\n"):
+                        if not line:
+                            continue
+                        if line.startswith("PING"):
+                            self._send(f"PONG {line.split()[1]}")
+                        parts = line.split()
+                        if len(parts) > 1 and parts[1] == "001":
+                            self.connected = True
+                            self._send(f"JOIN {self.irc_channel}")
+                        elif line.startswith(":") and " PRIVMSG " in line:
+                            try:
+                                prefix, trailing = line[1:].split(" PRIVMSG ", 1)
+                                msg_nick = prefix.split("!", 1)[0]
+
+                                if " :" not in trailing:
+                                    continue
+
+                                msg = trailing.split(" :", 1)[1]
+                                self.set_last_message(f"{msg_nick}: {msg}")
+                            except Exception:
+                                pass
+            except Exception as e:
+                print(f"IRC Error: {e}. Reconnecting in 5s...")
+            finally:
+                with self.sock_lock:
+                    if self.sock:
                         try:
-                            prefix, trailing = line[1:].split(" PRIVMSG ", 1)
-                            msg_nick = prefix.split("!", 1)[0]
-
-                            if " :" not in trailing:
-                                continue
-
-                            msg = trailing.split(" :", 1)[1]
-                            self.set_last_message(f"{msg_nick}: {msg}")
+                            self.sock.close()
                         except Exception:
                             pass
-        except Exception as e:
-            print(f"IRC Error: {e}")
-        finally:
-            with self.sock_lock:
-                if self.sock:
-                    try:
-                        self.sock.close()
-                    except Exception:
-                        pass
-                self.sock = None
-            self.connected = False
+                    self.sock = None
+                self.connected = False
+
+            if self.running:
+                time.sleep(5)
 
     def stop(self):
         super().stop()
@@ -91,6 +97,6 @@ def start_irc(channel, server="irc.libera.chat", port=6667, nick="mettaclaw"):
     chan = IRCChannel("irc", channel, server, int(port), nick)
     chan.start()
     embodiment.register_channel("irc", chan)
-    embodiment._active_channel = "irc"
-    embodiment._running = True
+    embodiment._set_active_channel("irc")
+    embodiment._set_running(True)
     return True
