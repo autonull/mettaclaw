@@ -99,21 +99,28 @@ def useGPTEmbedding(text):
 def _zero_embedding(dim):
     return [0.0] * dim
 
-class MemoryManager:
-    """Encapsulates ChromaDB operations and falls back gracefully when absent."""
-    def __init__(self):
-        self.chroma_available = False
-        self.chroma_module = None
-        try:
-            import lib_chromadb
-            self.chroma_module = lib_chromadb
-            self.chroma_available = True
-        except ImportError:
-            logger.warning("lib_chromadb not available - memory functions disabled")
+class BaseMemoryManager:
+    """Abstract base class for memory management."""
+    chroma_available = False
+    def is_initialized(self): return False
+    def remember(self, text, time_str): return "Error: Memory system disabled"
+    def query(self, query_text, k=20): return "No memories found: Memory system disabled"
+
+class FallbackMemoryManager(BaseMemoryManager):
+    """Fallback when ChromaDB is absent."""
+    def remember(self, text, time_str):
+        return "Error: ChromaDB not available"
+
+    def query(self, query_text, k=20):
+        return "No memories yet (ChromaDB not available)"
+
+class ChromaMemoryManager(BaseMemoryManager):
+    """Active ChromaDB manager."""
+    chroma_available = True
+    def __init__(self, chroma_module):
+        self.chroma_module = chroma_module
 
     def is_initialized(self):
-        if not self.chroma_available:
-            return False
         try:
             return self.chroma_module.is_initialized()
         except Exception as e:
@@ -126,9 +133,6 @@ class MemoryManager:
         if not time_str:
             time_str = "unknown"
 
-        if not self.chroma_available:
-            return "Error: ChromaDB not available"
-
         try:
             embedding = useGPTEmbedding(text)
             item_id = self.chroma_module.remember(text, embedding, time_str)
@@ -140,9 +144,6 @@ class MemoryManager:
     def query(self, query_text, k=20):
         if not query_text or not isinstance(query_text, str):
             return "No memories found: empty query"
-
-        if not self.chroma_available:
-            return "No memories yet (ChromaDB not available)"
 
         if not self.is_initialized():
             return "No memories stored yet"
@@ -164,7 +165,17 @@ class MemoryManager:
             logger.error(f"Query failed: {e}")
             return f"No memories found (error: {str(e)[:50]})"
 
-_memory_manager = MemoryManager()
+def create_memory_manager():
+    try:
+        import lib_chromadb
+        return ChromaMemoryManager(lib_chromadb)
+    except ImportError:
+        logger.warning("lib_chromadb not available - memory functions disabled")
+        return FallbackMemoryManager()
+
+_memory_manager = create_memory_manager()
+# Export it so tests can mock it if needed
+MemoryManager = _memory_manager.__class__
 
 def remember(text, time_str):
     return _memory_manager.remember(text, time_str)

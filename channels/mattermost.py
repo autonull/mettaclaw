@@ -109,6 +109,6 @@ def start_mattermost(url, channel_id, token):
     chan = MattermostChannel("mattermost", url, channel_id, token)
     chan.start()
     embodiment.register_channel("mattermost", chan)
-    embodiment._active_channel = "mattermost"
-    embodiment._running = True
+    embodiment._set_active_channel("mattermost")
+    embodiment._set_running(True)
     return True

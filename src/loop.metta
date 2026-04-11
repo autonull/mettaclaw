@@ -33,6 +33,22 @@
                                           (change-state! &error $new)))
                  ($else $sexpr))))
 
+(= (parse-llm-response $respi)
+   (let* (($resp (py-call (helper.balance_parentheses $respi)))
+          ($response (if (== "(" (first_char $resp)) $resp
+                         (progn (println! $resp) (repr (REMEMBER:OUTPUT_NOTHING_ELSE_THAN: ((skill arg) ...))))))
+          ($sexpr (catch (sread $response)))
+          ($_ (change-state! &error ()))
+          ($_ (HandleError MULTI_COMMAND_FAILURE_NOTHING_WAS_DONE_PLEASE_CORRECT_PARENTHESES_AND_USE_QUOTES_AND_RETRY $response $sexpr))
+          ($_ (println! (RESPONSE: $sexpr))))
+         ($response $sexpr)))
+
+(= (execute-commands $sexpr)
+   (RESULTS: (collapse
+               (let $s (superpose $sexpr)
+                 (COMMAND_RETURN: ($s (HandleError SINGLE_COMMAND_FORMAT_ERROR_NOTHING_WAS_DONE_PLEASE_FIX_AND_RETRY $s
+                                        (catch (let $R (eval $s) (py-call (helper.normalize_string $R)))))))))))
+
 (= (mettaclaw)
    (mettaclaw 1))
 
@@ -62,18 +78,11 @@
                       ($_ (println! (CHARS_SENT: (string_length $send) $send)))
 
                       ($respi (py-call (lib_llm_ext.generate_response (LLM) $send (maxOutputToken))))
-                      ($resp (py-call (helper.balance_parentheses $respi)))
 
-                      ($response (if (== "(" (first_char $resp)) $resp
-                                     (progn (println! $resp) (repr (REMEMBER:OUTPUT_NOTHING_ELSE_THAN: ((skill arg) ...))))))
-                      ($sexpr (catch (sread $response)))
-                      ($_ (change-state! &error ()))
-                      ($_ (HandleError MULTI_COMMAND_FAILURE_NOTHING_WAS_DONE_PLEASE_CORRECT_PARENTHESES_AND_USE_QUOTES_AND_RETRY $response $sexpr))
-                      ($_ (println! (RESPONSE: $sexpr)))
+                      ;; Extracting the parsing and execution to helpers:
+                      (($response $sexpr) (parse-llm-response $respi))
+                      ($results (execute-commands $sexpr))
 
-                      ($results (RESULTS: (collapse (let $s (superpose $sexpr)
-                                                      (COMMAND_RETURN: ($s (HandleError SINGLE_COMMAND_FORMAT_ERROR_NOTHING_WAS_DONE_PLEASE_FIX_AND_RETRY $s
-                                                                                        (catch (let $R (eval $s) (py-call (helper.normalize_string $R)))))))))))
                       ($_ (println! $results)))
                  (progn
                    (if (or $msgnew (not (== $sexpr ()))) (addToHistory $msg $response $sexpr $msgnew) _)

@@ -56,6 +56,6 @@ def start_cli(prompt="> ", welcome_msg=None):
     chan = CLIChannel("cli", prompt, welcome_msg)
     chan.start()
     embodiment.register_channel("cli", chan)
-    embodiment._active_channel = "cli"
-    embodiment._running = True
+    embodiment._set_active_channel("cli")
+    embodiment._set_running(True)
     return True

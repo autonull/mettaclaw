@@ -71,24 +71,31 @@ RUN_FLAGS=(
 
 # Common mount list for local MeTTa files (read-only, leaves memory/ writable)
 local_mounts() {
-if [[ -f "$SCRIPT_DIR/run.metta" ]]; then
-echo "-v"
-echo "$SCRIPT_DIR/run.metta:/opt/PeTTa/repos/mettaclaw/run.metta:ro"
-echo "-v"
-echo "$SCRIPT_DIR/lib_mettaclaw.metta:/opt/PeTTa/repos/mettaclaw/lib_mettaclaw.metta:ro"
-echo "-v"
-echo "$SCRIPT_DIR/lib_nal.metta:/opt/PeTTa/repos/mettaclaw/lib_nal.metta:ro"
-echo "-v"
-echo "$SCRIPT_DIR/lib_llm_ext.py:/opt/PeTTa/repos/mettaclaw/lib_llm_ext.py:ro"
-echo "-v"
-echo "$SCRIPT_DIR/src:/opt/PeTTa/repos/mettaclaw/src:ro"
-echo "-v"
-echo "$SCRIPT_DIR/channels:/opt/PeTTa/repos/mettaclaw/channels:ro"
-echo "-v"
-echo "$SCRIPT_DIR/container_run.sh:/opt/PeTTa/container_run.sh:ro"
-echo "-v"
-echo "$SCRIPT_DIR/agent_run.py:/opt/PeTTa/agent_run.py:ro"
-fi
+    if [[ -f "$SCRIPT_DIR/run.metta" ]]; then
+        local files=(
+            "run.metta"
+            "lib_mettaclaw.metta"
+            "lib_nal.metta"
+            "lib_llm_ext.py"
+        )
+        local dirs=(
+            "src"
+            "channels"
+        )
+
+        for file in "${files[@]}"; do
+            echo "-v"
+            echo "$SCRIPT_DIR/$file:/opt/PeTTa/repos/mettaclaw/$file:ro"
+        done
+        for dir in "${dirs[@]}"; do
+            echo "-v"
+            echo "$SCRIPT_DIR/$dir:/opt/PeTTa/repos/mettaclaw/$dir:ro"
+        done
+        echo "-v"
+        echo "$SCRIPT_DIR/container_run.sh:/opt/PeTTa/container_run.sh:ro"
+        echo "-v"
+        echo "$SCRIPT_DIR/agent_run.py:/opt/PeTTa/agent_run.py:ro"
+    fi
 }
 
 cmd_build() {

@@ -18,12 +18,12 @@ class MockChannel(Channel):
 def clean_embodiment():
     embodiment.stop_all()
     # Reset channels dict explicitly for isolation
-    embodiment._channels.clear()
-    embodiment._active_channel = None
-    embodiment._running = False
+    embodiment.bus._channels.clear()
+    embodiment.bus._active_channel = None
+    embodiment.bus._running = False
     yield
     embodiment.stop_all()
-    embodiment._channels.clear()
+    embodiment.bus._channels.clear()
 
 def test_embodiment_registration():
     chan = MockChannel("mock1")

@@ -91,6 +91,6 @@ def start_irc(channel, server="irc.libera.chat", port=6667, nick="mettaclaw"):
     chan = IRCChannel("irc", channel, server, int(port), nick)
     chan.start()
     embodiment.register_channel("irc", chan)
-    embodiment._active_channel = "irc"
-    embodiment._running = True
+    embodiment._set_active_channel("irc")
+    embodiment._set_running(True)
     return True
