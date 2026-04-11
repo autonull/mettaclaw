@@ -192,7 +192,7 @@ def summarize_errors(error_list):
     
     # Extract first failed command if available
     try:
-        m = re.search(r'(?:SINGLE_COMMAND_FORMAT_ERROR|MULTI_COMMAND_FAILURE).*?\((\w+)\s+"[^"]*"', s)
+        m = re.search(r'(?:SINGLE_COMMAND_FORMAT_ERROR|MULTI_COMMAND_FAILURE)[^)]*\(\s*(\w+)', s)
         first_cmd = f" ({m.group(1)} ...)" if m else ""
     except Exception:
         first_cmd = ""
