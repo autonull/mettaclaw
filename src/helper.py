@@ -36,6 +36,8 @@ def get_history_path():
     return HISTORY_PATH
 
 def extract_timestamp(line):
+    if not isinstance(line, str):
+        return None
     m = TS_RE.search(line)
     if not m:
         return None
@@ -146,12 +148,18 @@ def normalize_string(x):
             result = x.decode("utf-8", errors="ignore")
         else:
             result = str(x)
+
+        # Hard cap output
+        MAX_DISPLAY = 10000
+        if len(result) > MAX_DISPLAY:
+             result = result[:MAX_DISPLAY] + f"... (output truncated, total {len(result)} chars)"
+
         # Reverse the string-safe placeholders
         result = result.replace("_quote_", '"').replace("_newline_", "\n").replace("_apostrophe_", "'")
         result = result.replace("_apostrophe_", "'")  # Handle double replacement
         return result
     except Exception:
-        return str(x)
+        return str(x)[:10000]
 
 def clean_response(s):
     """Replace placeholder tokens with real characters before storing to history."""
@@ -196,6 +204,12 @@ def format_lastresults(results_str, error_summary):
     """Concatenate results and error summary into a clean string for &lastresults."""
     if not isinstance(results_str, str):
         results_str = str(results_str) if results_str else ""
+
+    # Cap total result to prevent blowing out the LLM context window
+    MAX_CHARS = 10000
+    if len(results_str) > MAX_CHARS:
+        results_str = results_str[:MAX_CHARS] + f"... (truncated, total length was {len(results_str)} chars)"
+
     cleaned = clean_response(results_str)
     err = error_summary if isinstance(error_summary, str) and error_summary else ""
     return cleaned + err

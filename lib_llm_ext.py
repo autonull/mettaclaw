@@ -33,6 +33,8 @@ def _clean(text):
         return text.replace("_quote_", '"').replace("_apostrophe_", "'")
     return ""
 
+import time
+
 def _chat(model, content, max_tokens=6000):
     if not LITELLM_AVAILABLE:
         return "Error: litellm not installed"
@@ -41,16 +43,25 @@ def _chat(model, content, max_tokens=6000):
         if not model.startswith(('gpt-', 'claude-', 'o1-', 'o3-')):
              model = f"ollama/{model}"
 
-    try:
-        resp = litellm.completion(
-            model=model,
-            messages=[{"role": "user", "content": content}],
-            max_tokens=max_tokens
-        )
-        return _clean(resp.choices[0].message.content)
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        return f"LLM Error: {str(e)}"
+    retries = 3
+    base_delay = 2
+    for attempt in range(retries):
+        try:
+            resp = litellm.completion(
+                model=model,
+                messages=[{"role": "user", "content": content}],
+                max_tokens=max_tokens,
+                timeout=120
+            )
+            return _clean(resp.choices[0].message.content)
+        except Exception as e:
+            if attempt < retries - 1:
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"LLM call failed (attempt {attempt+1}/{retries}): {e}. Retrying in {delay}s...")
+                time.sleep(delay)
+            else:
+                logger.error(f"LLM call failed after {retries} attempts: {e}")
+                return f"LLM Error: {str(e)}"
 
 def generate_response(model, content, max_tokens=6000):
     try:
@@ -68,33 +79,46 @@ def useGPTEmbedding(text):
 
     ollama_base = os.environ.get("OLLAMA_API_BASE", "").rstrip("/")
     if ollama_base:
-        try:
-            data = json.dumps({"model": DEFAULT_EMBED_MODEL, "prompt": text}).encode()
-            req = urllib.request.Request(
-                f"{ollama_base}/api/embeddings",
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read())
-                return result.get("embedding", _zero_embedding(DEFAULT_EMBED_DIM))
-        except Exception as e:
-            logger.warning(f"Ollama embedding failed: {e}")
+        retries = 3
+        base_delay = 1
+        for attempt in range(retries):
+            try:
+                data = json.dumps({"model": DEFAULT_EMBED_MODEL, "prompt": text}).encode()
+                req = urllib.request.Request(
+                    f"{ollama_base}/api/embeddings",
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read())
+                    return result.get("embedding", _zero_embedding(DEFAULT_EMBED_DIM))
+            except Exception as e:
+                if attempt < retries - 1:
+                    time.sleep(base_delay * (2 ** attempt))
+                else:
+                    logger.warning(f"Ollama embedding failed after {retries} attempts: {e}")
 
     if not LITELLM_AVAILABLE:
         logger.warning("litellm unavailable, returning zero embedding")
         return _zero_embedding(1536)
 
-    try:
-        resp = litellm.embedding(
-            model="text-embedding-3-small",
-            input=[text],
-        )
-        return resp.data[0]["embedding"]
-    except Exception as e:
-        logger.error(f"LiteLLM embedding failed: {e}")
-        return _zero_embedding(1536)
+    retries = 3
+    base_delay = 1
+    for attempt in range(retries):
+        try:
+            resp = litellm.embedding(
+                model="text-embedding-3-small",
+                input=[text],
+                timeout=60
+            )
+            return resp.data[0]["embedding"]
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(base_delay * (2 ** attempt))
+            else:
+                logger.error(f"LiteLLM embedding failed after {retries} attempts: {e}")
+                return _zero_embedding(1536)
 
 def _zero_embedding(dim):
     return [0.0] * dim

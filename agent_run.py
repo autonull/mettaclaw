@@ -75,13 +75,15 @@ class AgentLogger:
     def __init__(self, path):
         self.path = path
         self.start = time.time()
+        self.lock = threading.Lock()
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         Path(self.path).write_text("")
 
     def _write(self, event, **kwargs):
         entry = {"t": round(time.time() - self.start, 2), "event": event, **kwargs}
-        with open(self.path, "a") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+        with self.lock:
+            with open(self.path, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
 
     def iteration(self, k, loops, human_msg):
         self._write("iteration", k=k, loops=loops, human_msg=human_msg)

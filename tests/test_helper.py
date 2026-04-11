@@ -57,6 +57,17 @@ def test_clean_response():
     assert helper.clean_response("hello _quote_world_quote_ and _apostrophe_friend_apostrophe_") == 'hello "world" and \'friend\''
     assert helper.clean_response(None) == ""
 
+def test_truncation():
+    # Over 10k chars should truncate
+    long_string = "a" * 15000
+    res = helper.normalize_string(long_string)
+    assert len(res) < 11000
+    assert "... (output truncated" in res
+
+    res_last = helper.format_lastresults(long_string, "")
+    assert len(res_last) < 11000
+    assert "... (truncated" in res_last
+
 def test_summarize_errors():
     assert helper.summarize_errors(None) == ""
     assert helper.summarize_errors([]) == ""

@@ -15,3 +15,4 @@
 !(import! &self (library mettaclaw ./src/skills))
 !(import! &self (library mettaclaw ./src/memory))
 !(import! &self (library mettaclaw ./src/loop))
+!(git-import! "https://github.com/patham9/petta_lib_chromadb.git")
