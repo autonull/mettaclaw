@@ -22,16 +22,12 @@
              (last_chars $clean (maxHistory)))))
 
 (= (addToHistory $lastmessage $response $sexpr $msgnew)
-   (let $clean (py-call (helper.clean_response $response))
-        (if $msgnew
-            (if (== (get-state &error) ())
-                (appendToHistory ((get_time_as_string) (newline) "HUMAN_MESSAGE: " $lastmessage (newline) $clean (newline)))
-                (let $err (last_chars (string-safe (repr (get-state &error))) (maxErrorFeedback))
-                     (appendToHistory ((get_time_as_string) (newline) "HUMAN_MESSAGE: " $lastmessage (newline) $clean (newline) " ERROR: " $err))))
-            (if (== (get-state &error) ())
-                (appendToHistory ((get_time_as_string) (newline) $clean (newline)))
-                (let $err (last_chars (string-safe (repr (get-state &error))) (maxErrorFeedback))
-                     (appendToHistory ((get_time_as_string) (newline) $clean (newline) " ERROR: " $err)))))))
+   (let* (($clean (py-call (helper.clean_response $response)))
+          ($human_str (if $msgnew (py-call (helper.normalize_string ("HUMAN_MESSAGE: " $lastmessage (newline)))) ""))
+          ($error_state (get-state &error))
+          ($err_str (if (== $error_state ()) ""
+                        (py-call (helper.normalize_string (" ERROR: " (last_chars (string-safe (repr $error_state)) (maxErrorFeedback))))))))
+         (appendToHistory ((get_time_as_string) (newline) $human_str $clean (newline) $err_str))))
 
 (= (appendToHistory $addition)
    (let $raw (swrite $addition)
