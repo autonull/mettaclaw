@@ -5,20 +5,6 @@ from datetime import datetime
 TS_RE = re.compile(r'^\("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"')
 HISTORY_PATH = os.environ.get("METTACLAW_HISTORY", "memory/history.metta")
 
-def get_provider():
-    """Auto-detect LLM provider based on environment variables."""
-    if os.environ.get("OLLAMA_API_BASE"):
-        return "Ollama"
-    if os.environ.get("OPENAI_API_KEY"):
-        return "OpenAI"
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return "Anthropic"
-    if os.environ.get("GROQ_API_KEY"):
-        return "Groq"
-    if os.environ.get("OPENROUTER_API_KEY"):
-        return "OpenRouter"
-    return "Ollama"
-
 def get_llm_model():
     """Auto-detect LLM model based on environment variables."""
     if os.environ.get("OLLAMA_MODEL"):
@@ -87,13 +73,13 @@ def around_time(needle_time_str, k):
     ret = "".join(f"{lineno}:{line}" for lineno, line in buffer[start:end])
     return ret if ret else "No entries found"
 
-def _extract_commands(s):
+def _extract_commands(s: str) -> list:
     """Extract individual s-expressions from a string that may contain multiple commands.
     Handles formats like:
       ((send "hi") (query "topic"))
       (send "hi")\n(query "topic")
       ((send "hi"))
-    Returns list of properly parenthesized command strings.
+    Returns a list of properly parenthesized command strings.
     """
     commands = []
     depth = 0
@@ -109,22 +95,16 @@ def _extract_commands(s):
                 cmd = s[start:i+1].strip()
                 # Unwrap double-parens: ((cmd)) -> (cmd)
                 while cmd.startswith("((") and cmd.endswith("))"):
-                    cmd = cmd[1:-1]
+                    cmd = cmd[1:-1].strip()
                 if cmd.startswith("(") and cmd.endswith(")"):
                     commands.append(cmd)
                 start = None
     return commands
 
 
-def balance_parentheses(s):
+def balance_parentheses(s: str) -> str:
     """Normalize LLM response into a single MeTTa-evaluable s-expression list.
-    The LLM may produce:
-      ((send "hi") (query "topic"))
-      (send "hi") (query "topic")
-      Sure! Here: (send "hi")
-    We extract commands and wrap them as a single list:
-      ((send "hi") (query "topic"))
-    This is ONE s-expression that superpose can iterate over.
+    Extracts commands and wraps them as a single list: ((cmd1) (cmd2)).
     """
     if not s:
         return '((send "Error: empty response"))'
@@ -144,28 +124,9 @@ def balance_parentheses(s):
             # Insert as a pin command at the front
             s = f'(pin "{garbage}") ' + s
 
-    # Extract individual commands by paren depth tracking
-    commands = []
-    depth = 0
-    start = None
-    for i, ch in enumerate(s):
-        if ch == '(':
-            if depth == 0:
-                start = i
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-            if depth == 0 and start is not None:
-                cmd = s[start:i+1].strip()
-                # Unwrap double-parens: ((cmd)) -> (cmd)
-                while cmd.startswith("((") and cmd.endswith("))"):
-                    cmd = cmd[1:-1]
-                if cmd.startswith("(") and cmd.endswith(")"):
-                    commands.append(cmd)
-                start = None
+    commands = _extract_commands(s)
 
     if commands:
-        # Return as a single list: (cmd1) (cmd2) -> ((cmd1) (cmd2))
         return '(' + ' '.join(commands) + ')'
 
     # Fallback: no parens found, wrap as single string command
@@ -217,7 +178,7 @@ def summarize_errors(error_list):
     
     # Extract first failed command if available
     try:
-        m = re.search(r'(?:SINGLE_COMMAND_FORMAT_ERROR|MULTI_COMMAND_FAILURE).*?\((\w+)\s+"[^"]*"', s)
+        m = re.search(r'(?:SINGLE_COMMAND_FORMAT_ERROR|MULTI_COMMAND_FAILURE)[^)]*\(\s*(\w+)', s)
         first_cmd = f" ({m.group(1)} ...)" if m else ""
     except Exception:
         first_cmd = ""

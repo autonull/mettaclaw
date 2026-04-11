@@ -13,14 +13,17 @@ logger = logging.getLogger(__name__)
 
 try:
     import litellm
-    from litellm import completion
     LITELLM_AVAILABLE = True
+    litellm.drop_params = True
+    litellm.set_verbose = False
 except ImportError:
     LITELLM_AVAILABLE = False
     logger.warning("litellm not installed - LLM calls will fail")
-
-litellm.drop_params = True
-litellm.set_verbose = False
+    class DummyLiteLLM:
+        def __init__(self):
+            self.drop_params = True
+            self.set_verbose = False
+    litellm = DummyLiteLLM()
 
 DEFAULT_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 DEFAULT_EMBED_DIM = 768
@@ -33,8 +36,13 @@ def _clean(text):
 def _chat(model, content, max_tokens=6000):
     if not LITELLM_AVAILABLE:
         return "Error: litellm not installed"
+
+    if model and '/' not in model and not model.startswith('ollama/'):
+        if not model.startswith(('gpt-', 'claude-', 'o1-', 'o3-')):
+             model = f"ollama/{model}"
+
     try:
-        resp = completion(
+        resp = litellm.completion(
             model=model,
             messages=[{"role": "user", "content": content}],
             max_tokens=max_tokens
@@ -44,8 +52,14 @@ def _chat(model, content, max_tokens=6000):
         logger.error(f"LLM call failed: {e}")
         return f"LLM Error: {str(e)}"
 
+def generate_response(model, content, max_tokens=6000):
+    try:
+        max_tokens = int(max_tokens)
+    except (ValueError, TypeError):
+        max_tokens = 6000
+    return _chat(model=model, content=content, max_tokens=max_tokens)
+
 def useGPTEmbedding(text):
-    """Return a list of floats embedding for the given text."""
     if not isinstance(text, str):
         text = str(text) if text else ""
     
@@ -83,94 +97,77 @@ def useGPTEmbedding(text):
         return _zero_embedding(1536)
 
 def _zero_embedding(dim):
-    """Fallback: return zero vector when embedding fails."""
     return [0.0] * dim
 
-def _check_chromadb():
-    """Check if ChromaDB is available."""
-    try:
-        import lib_chromadb
-        return True
-    except ImportError:
-        logger.warning("lib_chromadb not available - memory functions disabled")
-        return False
+class MemoryManager:
+    """Encapsulates ChromaDB operations and falls back gracefully when absent."""
+    def __init__(self):
+        self.chroma_available = False
+        self.chroma_module = None
+        try:
+            import lib_chromadb
+            self.chroma_module = lib_chromadb
+            self.chroma_available = True
+        except ImportError:
+            logger.warning("lib_chromadb not available - memory functions disabled")
 
-def _chromadb_init_ok():
-    """Check if ChromaDB collection is initialized."""
-    if not _check_chromadb():
-        return False
-    try:
-        import lib_chromadb
-        return lib_chromadb.is_initialized()
-    except Exception as e:
-        logger.warning(f"ChromaDB not initialized: {e}")
-        return False
+    def is_initialized(self):
+        if not self.chroma_available:
+            return False
+        try:
+            return self.chroma_module.is_initialized()
+        except Exception as e:
+            logger.warning(f"ChromaDB not initialized: {e}")
+            return False
+
+    def remember(self, text, time_str):
+        if not text or not isinstance(text, str):
+            return "Error: empty text"
+        if not time_str:
+            time_str = "unknown"
+
+        if not self.chroma_available:
+            return "Error: ChromaDB not available"
+
+        try:
+            embedding = useGPTEmbedding(text)
+            item_id = self.chroma_module.remember(text, embedding, time_str)
+            return item_id or "Error: failed to store"
+        except Exception as e:
+            logger.error(f"Remember failed: {e}")
+            return f"Remember error: {e}"
+
+    def query(self, query_text, k=20):
+        if not query_text or not isinstance(query_text, str):
+            return "No memories found: empty query"
+
+        if not self.chroma_available:
+            return "No memories yet (ChromaDB not available)"
+
+        if not self.is_initialized():
+            return "No memories stored yet"
+
+        try:
+            k = int(k) if k else 20
+            embedding = useGPTEmbedding(query_text)
+            results = self.chroma_module.query(embedding, k)
+            if not results:
+                return f"No memories found for: {query_text}"
+            parts = []
+            for t, content in results:
+                if t:
+                    parts.append(f"[{t}] {content}")
+                else:
+                    parts.append(content)
+            return " | ".join(parts)
+        except Exception as e:
+            logger.error(f"Query failed: {e}")
+            return f"No memories found (error: {str(e)[:50]})"
+
+_memory_manager = MemoryManager()
 
 def remember(text, time_str):
-    """Embed text and store in ChromaDB."""
-    if not text or not isinstance(text, str):
-        return "Error: empty text"
-    if not time_str:
-        time_str = "unknown"
-    
-    if not _check_chromadb():
-        return "Error: ChromaDB not available"
-    
-    try:
-        import lib_chromadb
-        embedding = useGPTEmbedding(text)
-        item_id = lib_chromadb.remember(text, embedding, time_str)
-        return item_id or "Error: failed to store"
-    except Exception as e:
-        logger.error(f"Remember failed: {e}")
-        return f"Remember error: {e}"
+    return _memory_manager.remember(text, time_str)
 
 def query_memories(query_text, k=20):
-    """Embed query text and retrieve similar memories from ChromaDB."""
-    if not query_text or not isinstance(query_text, str):
-        return "No memories found: empty query"
-    
-    if not _check_chromadb():
-        return "No memories yet (ChromaDB not available)"
-    
-    if not _chromadb_init_ok():
-        return "No memories stored yet"
-
-    try:
-        import lib_chromadb
-        k = int(k) if k else 20
-        embedding = useGPTEmbedding(query_text)
-        results = lib_chromadb.query(embedding, k)
-        if not results:
-            return f"No memories found for: {query_text}"
-        parts = []
-        for t, content in results:
-            if t:
-                parts.append(f"[{t}] {content}")
-            else:
-                parts.append(content)
-        return " | ".join(parts)
-    except Exception as e:
-        logger.error(f"Query failed: {e}")
-        return f"No memories found (error: {str(e)[:50]})"
-
-def useMiniMax(content):
-    if not LITELLM_AVAILABLE:
-        return "Error: litellm not installed"
-    model = os.environ.get('MINIMAX_MODEL', 'openai/minimax/minimax-m2.5')
-    return _chat(model=model, content=content, max_tokens=6000)
-
-def useClaude(content):
-    if not LITELLM_AVAILABLE:
-        return "Error: litellm not installed"
-    model = os.environ.get('CLAUDE_MODEL', 'anthropic/claude-opus-4-20250514')
-    return _chat(model=model, content=content, max_tokens=8192)
-
-def useGPT(model, max_tokens, reasoning_mode, content):
-    return _chat(model=model, content=content, max_tokens=max_tokens)
-
-def useLLM(model, content, max_tokens=6000, reasoning_mode=None):
-    # Handle Ollama model names - convert to proper litellm format
-    if model and '/' not in model:
-        model = f"ollama/{model}"
-    return _chat(model=model, content=content, max_tokens=max_tokens)
+    return _memory_manager.query(query_text, k)

@@ -1,113 +1,114 @@
-import threading, json
-import requests, websocket
+import threading
+import json
 import time
+import requests
+import websocket
+from channels.base import Channel
 
-_running = False
-_ws = None
-_ws_lock = threading.Lock()
-_last_message = ""
-_msg_lock = threading.Lock()
-_connected = False
+class MattermostChannel(Channel):
+    def __init__(self, name, url, channel_id, token):
+        super().__init__(name)
+        self.url = url
+        self.channel_id = channel_id
+        self.token = token
+        self.headers = {"Authorization": f"Bearer {self.token}"}
+        self.bot_user_id = None
+        self.ws = None
+        self.ws_lock = threading.Lock()
+        self.thread = None
 
-# ---- Mattermost config (dummy token ok) ----
-MM_URL = "https://chat.singularitynet.io"
-CHANNEL_ID = "8fjrmabjx7gupy7e5kjznpt5qh" #NOT AN ID JUST NAME: "mettaclaw"x
-BOT_TOKEN = ""
+    def _get_bot_user_id(self):
+        r = requests.get(f"{self.url}/api/v4/users/me", headers=self.headers)
+        r.raise_for_status()
+        return r.json()["id"]
 
-def _get_bot_user_id():
-    global headers
-    r = requests.get(
-        f"{MM_URL}/api/v4/users/me",
-        headers=_headers
-    )
-    return r.json()["id"]
+    def _get_display_name(self, user_id):
+        r = requests.get(f"{self.url}/api/v4/users/{user_id}", headers=self.headers)
+        r.raise_for_status()
+        u = r.json()
+        if u.get("first_name") or u.get("last_name"):
+            return f"{u.get('first_name','')} {u.get('last_name','')}".strip()
+        return u["username"]
 
-def _set_last(msg):
-    global _last_message
-    with _msg_lock:
-        if _last_message == "":
-            _last_message = msg
-        else:
-            _last_message = _last_message + " | " + msg
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self._ws_loop, daemon=True)
+        self.thread.start()
 
-def getLastMessage():
-    global _last_message
-    with _msg_lock:
-        tmp = _last_message
-        _last_message = ""
-        return tmp
-
-def _get_display_name(user_id):
-    r = requests.get(
-        f"{MM_URL}/api/v4/users/{user_id}",
-        headers=_headers
-    )
-    u = r.json()
-
-    # Mimic common Mattermost display setting
-    if u.get("first_name") or u.get("last_name"):
-        return f"{u.get('first_name','')} {u.get('last_name','')}".strip()
-
-    return u["username"]
-
-def _ws_loop():
-    global _ws, _connected, BOT_USER_ID
-
-    ws_url = MM_URL.replace("https", "wss") + "/api/v4/websocket"
-    ws = websocket.WebSocket()
-    ws.connect(ws_url, header=[f"Authorization: Bearer {BOT_TOKEN}"])
-
-    BOT_USER_ID = _get_bot_user_id()
-    _ws = ws
-    _connected = True
-
-    last_ping = time.time()
-
-    while _running:
+    def _ws_loop(self):
         try:
-            # send ping every 25s
-            if time.time() - last_ping > 25:
-                ws.ping()
-                last_ping = time.time()
+            self.bot_user_id = self._get_bot_user_id()
+        except Exception as e:
+            print(f"Failed to get Mattermost bot user ID: {e}")
+            self.running = False
+            return
 
-            ws.settimeout(1)
-            event = json.loads(ws.recv())
+        ws_url = self.url.replace("https", "wss").replace("http", "ws") + "/api/v4/websocket"
+        ws = websocket.WebSocket()
+        try:
+            ws.connect(ws_url, header=[f"Authorization: Bearer {self.token}"])
+        except Exception as e:
+            print(f"Mattermost WS connection failed: {e}")
+            self.running = False
+            return
 
-            if event.get("event") == "posted":
-                post = json.loads(event["data"]["post"])
-                if post["channel_id"] == CHANNEL_ID and post["user_id"] != BOT_USER_ID:
-                    name = _get_display_name(post["user_id"])
-                    _set_last(f"{name}: {post['message']}")
+        self.ws = ws
+        self.connected = True
+        last_ping = time.time()
 
-        except websocket.WebSocketTimeoutException:
-            continue
-        except Exception:
-            break
+        while self.running:
+            try:
+                if time.time() - last_ping > 25:
+                    ws.ping()
+                    last_ping = time.time()
 
-    ws.close()
-    _connected = False
+                ws.settimeout(1)
+                event = json.loads(ws.recv())
 
-def start_mattermost(MM_URL_, CHANNEL_ID_, BOT_TOKEN_):
-    global _running, MM_URL, CHANNEL_ID, BOT_TOKEN, _headers
-    MM_URL = MM_URL_
-    CHANNEL_ID = CHANNEL_ID_
-    BOT_TOKEN = BOT_TOKEN_
-    _headers = {"Authorization": f"Bearer {BOT_TOKEN}"}
-    _running = True
-    t = threading.Thread(target=_ws_loop, daemon=True)
-    t.start()
-    return t
+                if event.get("event") == "posted":
+                    post = json.loads(event["data"]["post"])
+                    if post["channel_id"] == self.channel_id and post["user_id"] != self.bot_user_id:
+                        try:
+                            name = self._get_display_name(post["user_id"])
+                        except Exception:
+                            name = "unknown"
+                        self.set_last_message(f"{name}: {post['message']}")
 
-def stop_mattermost():
-    global _running
-    _running = False
+            except websocket.WebSocketTimeoutException:
+                continue
+            except Exception as e:
+                print(f"Mattermost WS error: {e}")
+                break
 
-def send_message(text):
-    text = text.replace("\\n", "\n")
-    if not _connected:
-        return
-    requests.post(
-        f"{MM_URL}/api/v4/posts",
-        headers=_headers,
-        json={"channel_id": CHANNEL_ID, "message": text}
-    )
+        ws.close()
+        self.connected = False
+
+    def stop(self):
+        super().stop()
+        if self.ws:
+            try:
+                self.ws.close()
+            except Exception:
+                pass
+
+    def send_message(self, text):
+        text = text.replace("\\n", "\n")
+        if not self.connected:
+            return
+        try:
+            requests.post(
+                f"{self.url}/api/v4/posts",
+                headers=self.headers,
+                json={"channel_id": self.channel_id, "message": text}
+            )
+        except Exception as e:
+            print(f"Error sending to Mattermost: {e}")
+
+def start_mattermost(url, channel_id, token):
+    import channels.embodiment as embodiment
+    chan = MattermostChannel("mattermost", url, channel_id, token)
+    chan.start()
+    embodiment.register_channel("mattermost", chan)
+    embodiment._active_channel = "mattermost"
+    embodiment._running = True
+    return True

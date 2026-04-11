@@ -28,22 +28,17 @@ fi
 # ── Detect LLM provider from env vars ──────────────────────────────────────
 PROVIDER_INIT=""
 if [ -n "${OLLAMA_API_BASE:-}" ]; then
-PROVIDER_MODEL="${OLLAMA_MODEL:-llama3}"
-PROVIDER_INIT="(= (provider) Ollama)
-(= (LLM) ollama/${PROVIDER_MODEL})"
+    PROVIDER_MODEL="${OLLAMA_MODEL:-llama3}"
+    PROVIDER_INIT="(= (LLM) ollama/${PROVIDER_MODEL})"
 elif [ -n "${OPENAI_API_KEY:-}" ]; then
-    PROVIDER_INIT="(= (provider) OpenAI)
-(= (LLM) gpt-4o)"
+    PROVIDER_INIT="(= (LLM) gpt-4o)"
 elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-    PROVIDER_INIT="(= (provider) Anthropic)
-(= (LLM) claude-sonnet-4-20250514)"
+    PROVIDER_INIT="(= (LLM) claude-sonnet-4-20250514)"
 elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
-    PROVIDER_INIT="(= (provider) OpenAI)
-(= (LLM) openrouter/auto)"
+    PROVIDER_INIT="(= (LLM) openrouter/auto)"
 elif [ -n "${GROQ_API_KEY:-}" ]; then
     PROVIDER_MODEL="${OLLAMA_MODEL:-llama-3.3-70b-versatile}"
-    PROVIDER_INIT="(= (provider) OpenAI)
-(= (LLM) groq/$PROVIDER_MODEL)"
+    PROVIDER_INIT="(= (LLM) groq/$PROVIDER_MODEL)"
 fi
 
 # Write provider config if detected

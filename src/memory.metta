@@ -39,10 +39,10 @@
              (append-file (library mettaclaw ./memory/history.metta) $clean))))
 
 (= (remember $str)
-   (py-call (lib_chromadb.remember $str (useGPTEmbedding (string-safe $str)) (get_time_as_string))))
+   (py-call (lib_llm_ext.remember $str (get_time_as_string))))
 
 (= (query $str)
-   (let $raw (py-call (lib_chromadb.query (useGPTEmbedding (string-safe $str)) (maxRecallItems)))
+   (let $raw (py-call (lib_llm_ext.query_memories $str (maxRecallItems)))
         (if (== $raw true)
             (py-str ("No memories found for: " $str))
             $raw)))
