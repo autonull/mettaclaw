@@ -52,12 +52,21 @@ def search_(query, max_results=10):
     parser.feed(html)
     return parser.results[:max_results]
 
+import json
+
 def search(query, max_results=10):
     try:
-        ret = "("
-        for r in search_(query):
-            ret += "(TITLE: " + r["title"] + " SNIPPET: " + r["snippet"] + ") "
-        ret += ")"
-        return ret
-    except Exception:
-        return ""
+        results = search_(query, max_results=max_results)
+        if not results:
+            return "(No_Results)"
+
+        ret_parts = []
+        for r in results:
+            # We must escape strings for the MeTTa sread parser to safely consume them
+            safe_title = json.dumps(r.get("title", ""))
+            safe_snippet = json.dumps(r.get("snippet", ""))
+            ret_parts.append(f'(Result {safe_title} {safe_snippet})')
+
+        return "(" + " ".join(ret_parts) + ")"
+    except Exception as e:
+        return f'(Error "Search failed: {str(e)[:100]}")'

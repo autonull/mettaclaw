@@ -74,3 +74,41 @@ def test_embodiment_receive():
 
     # Second read should be empty as it consumes the message
     assert embodiment.receive_all() == ""
+
+def test_websearch():
+    import channels.websearch as websearch
+    # Test escaping behavior logic manually
+
+    # Normally this would be integration, but we can verify the search function
+    # string assembly gracefully formats results if search_ was mocked.
+    def mock_search_(query, max_results=10):
+        return [
+            {"title": 'Cool "Quotes"', "snippet": "A \n newline"}
+        ]
+
+    import types
+    import json
+
+    # Store real function to not permanently break module
+    real_search_ = websearch.search_
+    websearch.search_ = mock_search_
+
+    try:
+        res = websearch.search("test")
+        # Ensure json stringification happened securely
+        assert '"Cool \\"Quotes\\""' in res
+        assert '"A \\n newline"' in res
+        assert res.startswith("(") and res.endswith(")")
+        assert "TITLE:" not in res # Replaced with Result abstraction
+    finally:
+        websearch.search_ = real_search_
+
+    # Empty test
+    def mock_empty(query, max_results=10):
+        return []
+
+    websearch.search_ = mock_empty
+    try:
+        assert websearch.search("test") == "(No_Results)"
+    finally:
+        websearch.search_ = real_search_

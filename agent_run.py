@@ -14,6 +14,7 @@ import sys
 import json
 import time
 import threading
+import fcntl
 from pathlib import Path
 
 sys.path.insert(0, '/opt/PeTTa/python')
@@ -28,7 +29,7 @@ LOG_FILE = os.environ.get("METTACLAW_LOG_FILE", "/opt/PeTTa/agent.log")
 class LogFilter:
     """Filters out unwanted MeTTa/Prolog trace output."""
     def __init__(self):
-        self.skip_patterns = [
+        self.skip_patterns = (
             "--> ", ":- findall", "Not specialized", "configure_Spec_", "argk_Spec_",
             "import_prolog_functions", "import_prolog_function(", "compose(",
             "added function", "added rule", "added sexpr", "added translator",
@@ -40,8 +41,8 @@ class LogFilter:
             "maxOutputToken(6000)", "reasoningMode(medium)", "wakeupInterval(600)",
             "maxFeedback(5000)", "maxRecallItems(20)", "maxHistory(8000)",
             "maxErrorFeedback(2000)", "maxEpisodeRecallLines(20)", "commchannel(irc)"
-        ]
-        self.skip_prefixes = [
+        )
+        self.skip_prefixes = (
             "^", "'HandleError", "'get-state", "'change-state", "'println",
             "'string-safe", "'py-str", "'py-call", "'sread", "'append-file",
             "'read-file", "'swrite", "'write-file", "'add-atom", "'addToHistory",
@@ -52,19 +53,18 @@ class LogFilter:
             "'quote ", "'exists_file", "'consult", "'use_module", "'useGPT",
             "'useGPTEmbedding", "'getContext", "'initLoop", "'initMemory",
             "'initChannels", "'mettaclaw", "'configure", "'LLM", "provider(", "'IRC"
-        ]
+        )
+        self.caret_re = re.compile(r'^\^+$')
 
     def should_skip(self, line):
         stripped = line.strip()
         if not stripped:
             return True
-        for prefix in self.skip_prefixes:
-            if stripped.startswith(prefix):
-                return True
-        for pattern in self.skip_patterns:
-            if pattern in stripped:
-                return True
-        if re.match(r'^\^+$', stripped):
+        if stripped.startswith(self.skip_prefixes):
+            return True
+        if any(pattern in stripped for pattern in self.skip_patterns):
+            return True
+        if self.caret_re.match(stripped):
             return True
         return False
 
@@ -172,6 +172,21 @@ def main():
     if not os.path.exists(script):
         print(f"Error: Script not found: {script}", file=sys.stderr)
         sys.exit(1)
+
+    # Enforce single instance via history file lock
+    try:
+        sys.path.insert(0, '/opt/PeTTa/repos/mettaclaw/src')
+        import helper
+        history_path = helper.get_history_path()
+        Path(history_path).parent.mkdir(parents=True, exist_ok=True)
+        # Open in append mode so we don't truncate existing history
+        lock_fd = open(history_path, "a")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"Error: Another instance of MeTTaClaw is already running (lock held on {history_path})", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Warning: Could not establish instance lock: {e}", file=sys.stderr)
 
     logger = AgentLogger(LOG_FILE)
 

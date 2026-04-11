@@ -23,9 +23,9 @@
 
 (= (addToHistory $lastmessage $response $sexpr $msgnew)
    (let* (($clean (py-call (helper.clean_response $response)))
-          ($human_str (if $msgnew (py-call (helper.normalize_string ("HUMAN_MESSAGE: " $lastmessage (newline)))) ""))
+          ($human_str (if $msgnew (py-call (helper.normalize_string ("HUMAN_MESSAGE: " $lastmessage (newline)))) (empty)))
           ($error_state (get-state &error))
-          ($err_str (if (== $error_state ()) ""
+          ($err_str (if (== $error_state ()) (empty)
                         (py-call (helper.normalize_string (" ERROR: " (last_chars (string-safe (repr $error_state)) (maxErrorFeedback))))))))
          (appendToHistory ((get_time_as_string) (newline) $human_str $clean (newline) $err_str))))
 
