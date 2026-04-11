@@ -8,7 +8,7 @@
     "- Execute shell command without apostrophe in string, it returns the command output to you: (shell string_in_quotes)"
     "- Read file to string: (read-file filename_in_quotes)"
     "- Write string to file: (write-file filename_in_quotes string_in_quotes)"
-    "- Append line to file: (append-file filename_in_quotes string_in_quotes)",
+    "- Append line to file: (append-file filename_in_quotes string_in_quotes)"
     ;COMMUNICATION CHANNELS:
     "- Send message to user: (send string_in_quotes)"
     "- Search the web: (search string_in_quotes)"
@@ -38,7 +38,7 @@
    (progn (translatePredicate (exists_file $file))
           (translatePredicate (open $file append $Out))
           (translatePredicate (write $Out $str))
-          (translatePredicate (nl $Out)),
+          (translatePredicate (nl $Out))
           (translatePredicate (close $Out))
           True))
 

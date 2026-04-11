@@ -92,7 +92,7 @@ class MattermostChannel(Channel):
                 pass
 
     def send_message(self, text):
-        text = text.replace("\n", "\n")
+        text = text.replace("\\n", "\n")
         if not self.connected:
             return
         try:

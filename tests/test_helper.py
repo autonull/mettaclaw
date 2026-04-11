@@ -4,17 +4,6 @@ import tempfile
 from datetime import datetime
 import src.helper as helper
 
-def test_get_provider_env_vars(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-123")
-    assert helper.get_provider() == "OpenAI"
-
-    monkeypatch.delenv("OPENAI_API_KEY")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-123")
-    assert helper.get_provider() == "Anthropic"
-
-    monkeypatch.delenv("ANTHROPIC_API_KEY")
-    assert helper.get_provider() == "Ollama"
-
 def test_extract_timestamp():
     # Valid timestamp
     ts = helper.extract_timestamp('("2023-10-27 14:32:10" (remember "foo"))')

@@ -52,11 +52,7 @@ def getNextMessage() -> str:
         channel = _channels.get(name)
         if channel:
             try:
-                if name == 'cli' and hasattr(channel, 'get_message_blocking'):
-                    msg = channel.get_message_blocking(timeout=0.1)
-                    if msg:
-                        return msg
-                elif hasattr(channel, 'get_last_message'):
+                if hasattr(channel, 'get_last_message'):
                     msg = channel.get_last_message()
                     if msg:
                         return msg

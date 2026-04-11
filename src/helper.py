@@ -5,20 +5,6 @@ from datetime import datetime
 TS_RE = re.compile(r'^\("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"')
 HISTORY_PATH = os.environ.get("METTACLAW_HISTORY", "memory/history.metta")
 
-def get_provider():
-    """Auto-detect LLM provider based on environment variables."""
-    if os.environ.get("OLLAMA_API_BASE"):
-        return "Ollama"
-    if os.environ.get("OPENAI_API_KEY"):
-        return "OpenAI"
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return "Anthropic"
-    if os.environ.get("GROQ_API_KEY"):
-        return "Groq"
-    if os.environ.get("OPENROUTER_API_KEY"):
-        return "OpenRouter"
-    return "Ollama"
-
 def get_llm_model():
     """Auto-detect LLM model based on environment variables."""
     if os.environ.get("OLLAMA_MODEL"):

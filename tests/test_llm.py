@@ -6,7 +6,7 @@ import lib_llm_ext
 # Ensure chromadb functions return mock values to avoid loading chroma db in pure unit tests
 @pytest.fixture(autouse=True)
 def mock_chroma(monkeypatch):
-    monkeypatch.setattr(lib_llm_ext, "_check_chromadb", lambda: False)
+    monkeypatch.setattr(lib_llm_ext._memory_manager, "chroma_available", False)
 
 def test_generate_response_mocked(monkeypatch):
     def mock_completion(model, messages, max_tokens):
@@ -45,3 +45,12 @@ def test_query_no_chroma():
 def test_remember_no_chroma():
     resp = lib_llm_ext.remember("test memory", "time")
     assert "ChromaDB not available" in resp
+
+def test_memory_manager_mock_chroma(monkeypatch):
+    mgr = lib_llm_ext.MemoryManager()
+    # It should correctly identify chroma is missing
+    assert mgr.chroma_available is False
+
+    assert mgr.is_initialized() is False
+    assert "ChromaDB not available" in mgr.remember("text", "time")
+    assert "ChromaDB not available" in mgr.query("query")

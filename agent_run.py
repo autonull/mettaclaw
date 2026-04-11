@@ -186,7 +186,7 @@ def main():
         with open(provider_init) as f:
             content = f.read().strip()
             for line in content.split("\n"):
-                m = re.search(r"\(=\s*\((provider|LLM)\)\s*(\S+)\)", line)
+                m = re.search(r"\(=\s*\((LLM)\)\s*(\S+)\)", line)
                 if m:
                     print(f"  {m.group(1)} = {m.group(2)}")
         p.load_metta_file(provider_init)
